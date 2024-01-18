@@ -18,6 +18,7 @@ urlpatterns = [
     path('top_products/',top_products,name='top_products'),
     path('top_channels/',top_channels,name='top_channels'),
     path('top_return_products/',top_return_products,name='top_return_products'),
+    path('all_in_one/',all_in_one,name='all_in_one'),
     
     # path('return_customer_rate/',return_customer_rate,name='return_customer_rate'),
     

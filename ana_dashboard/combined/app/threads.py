@@ -1,6 +1,8 @@
 from threading import Thread
 import requests,json
 import datetime as dt
+import json
+import pandas as pd
 class SalesThread(Thread):
     def __init__(self,request,datacount,filterq,shop,newheaders):
         Thread.__init__(self)
@@ -156,3 +158,294 @@ class CustomerThread(Thread):
             data={'data':[],'next_page':'False','cursor':'','count':self.datacount["count"]} 
         
         self.data=data
+        
+        
+class InsightsThread(Thread):
+    def __init__(self,filterq,shop,newheaders):
+        Thread.__init__(self)
+        self.filterq=filterq
+        self.shop=shop
+        self.newheaders=newheaders
+        self.data=None
+    
+    def give_graphql_query_for_while(self,filterq,cursor):
+        graphql_query = """
+        query MyQuery($cursor: String, $filterq: String) {
+          orders(after: $cursor, first: 250, query: $filterq) {
+            edges {
+              cursor
+              node {
+                totalPrice
+                createdAt
+                currentSubtotalLineItemsQuantity
+                subtotalLineItemsQuantity
+				email
+              }
+            }
+            pageInfo {
+              endCursor
+              hasNextPage
+            }
+          }
+        }
+        """
+        
+    # # Your cursor and filterq variables
+    # cursor = "your_cursor_value"  # Replace with the actual cursor value
+    # filterq = "your_filterq_value"  # Replace with the actual filterq value
+    
+    # Variables as a dictionary
+        variables = {
+            "cursor": cursor,
+            "filterq": filterq
+        }
+        
+        # JSON payload including the query and variables
+        payload = {
+            "query": graphql_query,
+            "variables": variables
+        }
+
+        return payload
+    
+    def run(self):
+        url = f"https://{self.shop}/admin/api/2023-10/graphql.json"
+        graphql_query = """
+			query MyQuery($filterq: String) {
+			orders(query: $filterq, first: 250) {
+				edges {
+				cursor
+				node {
+					totalPrice
+					createdAt
+					currentSubtotalLineItemsQuantity
+					subtotalLineItemsQuantity
+					email
+				}
+				}
+				pageInfo {
+				endCursor
+				hasNextPage
+				}
+			}
+			}
+			"""
+
+        variables = {
+            "filterq": self.filterq
+        }
+
+        # JSON payload including the query and variables
+        payload = {
+            "query": graphql_query,
+            "variables": variables
+        }
+
+        response = requests.request("POST", url, headers=self.newheaders, json=payload)
+        data=json.loads(response.text)["data"]["orders"]
+        next_page =str(data["pageInfo"]["hasNextPage"])
+        cursor=str(data["pageInfo"]["endCursor"])
+        df=pd.json_normalize(data['edges'])
+
+        while next_page == "True":
+            print(69)
+            payload=self.give_graphql_query_for_while(self.filterq,cursor)
+            response = requests.request("POST", url, headers=self.newheaders, json=payload)
+            data=json.loads(response.text)["data"]["orders"]
+            next_page=str(data["pageInfo"]["hasNextPage"])
+            cursor=str(data["pageInfo"]["endCursor"])
+            df1=pd.json_normalize(data['edges'])
+            df=pd.concat([df,df1],axis=0)
+
+        total_quantity=int(df['node.currentSubtotalLineItemsQuantity'].sum())
+        total_price=round(df['node.totalPrice'].astype('float').sum(),2)
+        total_order=int(len(df)) 
+        total_return_quantity=sum(df["node.subtotalLineItemsQuantity"].astype(float)-df["node.currentSubtotalLineItemsQuantity"].astype(float))
+        return_rate=round((total_return_quantity/total_quantity)*100,2)
+        average_order_value=round(total_price/total_order,2)
+        average_units_ordered=round(total_quantity/total_order,2)
+        unique_users=df['node.email'].nunique()
+        return_customer_rate=round((len(df[df['node.email'].duplicated()])*100/unique_users),2)
+
+        data={
+                
+                'total_quantity':total_quantity,
+                'total_price':total_price,
+                'total_order':total_order,
+                'total_return_quantity':total_return_quantity,
+                'return_rate':return_rate,
+                'average_order_value':average_order_value,
+                'average_units_ordered':average_units_ordered,
+                'return_customer_rate':return_customer_rate,
+                'unique_users':unique_users
+
+            }
+        self.data=data
+			# print(len(df))
+			# print(len(df[df['node.email'].duplicated()])/len(df))
+			# df=pd.DataFrame([data])
+			# df.to_csv("insights1.csv",index=False)
+			# return JsonResponse(data=
+			# 	data.update({'mssg':'data processed successfully'}),
+			# 	safe=False,
+			# 	status=HTTP_200_OK
+			# )
+		# except:
+			# return JsonResponse(data=
+			# 	{
+			# 		'mssg':'Error occurred from shopify.com'
+			# 		# 'total_quantity':total_quantity,
+			# 		# 'total_price':total_price,
+			# 		# 'total_order':total_order,
+			# 		# 'total_return_quantity':total_return_quantity,
+			# 		# 'return_rate':return_rate,
+			# 		# 'average_order_value':average_order_value,
+			# 		# 'average_units_ordered':average_units_ordered
+
+			# 	},
+			# 	safe=False,
+			# 	status=HTTP_204_NO_CONTENT
+			# )
+
+class ProductsThread(Thread):
+    def __init__(self,filterq,shop,newheaders):
+        Thread.__init__(self)
+        self.filterq=filterq
+        self.shop=shop
+        self.newheaders=newheaders
+        self.data=None
+        self.df=None
+    
+    def give_data(self,url,newheaders, payload):
+        response = requests.request("POST", url, headers=newheaders, json=payload)
+        data=response.json()["data"]["orders"]
+        next_page=str(data["pageInfo"]["hasNextPage"])
+        cursor=str(data["pageInfo"]["endCursor"])
+        return data,next_page,cursor
+    
+    def run(self):
+        url = f"https://{self.shop}/admin/api/2023-07/graphql.json"
+        graphql_query = """
+            query MyQuery($filter: String) {
+            orders(first: 70, query: $filter) {
+                edges {
+                cursor
+                node {
+                    createdAt
+                    lineItems (first: 10){
+                    edges {
+                        node {
+                        quantity
+                        title
+                        originalTotal
+                        variantTitle
+                        }
+                    }
+                    
+                    }
+                }
+                }
+                pageInfo {
+                endCursor
+                hasNextPage
+                }
+            }
+            }
+            """
+
+
+
+        # Variables as a dictionary
+        variables = {
+            "filter": self.filterq
+        }
+
+        # JSON payload including the query and variables
+        payload = {
+            "query": graphql_query,
+            "variables": variables
+        }
+
+        response = requests.request("POST", url, headers=self.newheaders, json=payload)
+        data=json.loads(response.text)["data"]["orders"]
+        next_page = "True"
+        cursor=str(data["pageInfo"]["endCursor"])
+        # print(data['edges'])
+        df_inner=pd.json_normalize(data['edges'][0]['node']['lineItems']['edges'])
+        for i in range(1,len(data['edges'])):
+            df_inner1=pd.json_normalize(data['edges'][i]['node']['lineItems']['edges'])
+            df_inner=pd.concat([df_inner,df_inner1],axis=0)
+        df_list=[df_inner]
+
+        while next_page == "True":
+            print(69)
+            graphql_query = """
+                query MyQuery($cursor: String, $filterq: String) {
+                orders(after: $cursor, first: 70, query: $filterq) {
+                    edges {
+                    cursor
+                    node {
+                        createdAt
+                        lineItems(first: 10) {
+                        edges {
+                            node {
+                            quantity
+                            title
+                            originalTotal
+                            variantTitle
+                            }
+                        }
+                        }
+                    }
+                    }
+                    pageInfo {
+                    endCursor
+                    hasNextPage
+                    }
+                }
+                }
+                """
+
+
+
+        # Variables as a dictionary
+            variables = {
+                "cursor": cursor,
+                "filterq": self.filterq
+            }
+            
+            # JSON payload including the query and variables
+            payload = {
+                "query": graphql_query,
+                "variables": variables
+            }
+        
+            data,next_page,cursor=self.give_data(url,self.newheaders, payload)
+            df_inner=pd.json_normalize(data['edges'][0]['node']['lineItems']['edges'])
+            for i in range(1,len(data['edges'])):
+                df_inner1=pd.json_normalize(data['edges'][i]['node']['lineItems']['edges'])
+                df_inner=pd.concat([df_inner,df_inner1],axis=0)
+            
+
+            df_list.append(df_inner)
+
+        df=pd.concat(df_list,axis=0)
+        # df.to_csv("top_products.csv",index=False)
+        df['node.originalTotal']=df['node.originalTotal'].apply(pd.to_numeric)
+        df=df.groupby(by='node.title').sum()
+        df.reset_index(inplace=True)
+        df.rename(
+        columns={
+            'node.title':'name',
+            'node.quantity':'quantity',
+            'node.originalTotal':'total_price'
+        },
+            inplace=True
+        )
+        self.df=df
+        
+                
+    
+        
+        
+        

@@ -887,6 +887,70 @@ def top_return_products(request):
 		status=200
 	)
 
+@api_view(['POST'])
+@csrf_exempt
+def all_in_one(request):
+	cursor=request.POST.get('cursor')
+	startdate=request.POST.get('startdate')
+	enddate=request.POST.get('enddate')
+	next_page=request.POST.get('next_page')
+
+	# =request.POST.get('cursor'),request.POST.get('startdate'),request.POST.get('enddate')
+	startdate_q=startdate+'T00:00:00Z' 
+	enddate=enddate+'T23:59:59Z' 
+	# print(startdate,enddate)
+
+	filterq=f"created_at:>='{startdate_q}' AND created_at:<='{enddate}'"
+	outletapikey=request.headers.get('outletapikey')
+	print("=============>outletapikey",outletapikey)
+
+	shop,access=give_details(outletapikey)
+
+	url = f"https://{shop}/admin/api/2023-07/graphql.json"
+ 
+	filtercount=f"&created_at_min={startdate}&created_at_max={enddate}"
+	newheaders = {'X-Shopify-Access-Token': access,'Content-Type': 'application/json'}
+	urlcount = f"https://{shop}/admin/api/2023-10/orders/count.json?status=any{filtercount}"
+	datacount = json.loads(requests.get(urlcount, headers=newheaders).text)
+ 
+	urlcount_for_customers = f"https://{shop}/admin/api/2023-10/customers/count.json?status=any{filtercount}"
+	# newheaders = {'X-Shopify-Access-Token': access,'Content-Type': 'application/json'}
+	datacount_for_customers = json.loads(requests.get(urlcount_for_customers, headers=newheaders).text)
+ 
+	data={
+		'datacount':datacount['count'],
+  		'datacount_for_customers':datacount_for_customers['count']
+    
+  
+	}
+ 
+	insight_thread=InsightsThread(filterq,shop,newheaders)
+	
+
+	
+	products_thread=ProductsThread(filterq,shop,newheaders)
+	insight_thread.start()
+
+	products_thread.start()
+	insight_thread.join()
+	products_thread.join()
+	data.update(insight_thread.data)
+	products_df=products_thread.df
+	print(products_df)
+
+	return JsonResponse(
+		data=data,
+		safe=False,
+		status=200
+	)
+ 
+
+ 
+
+ 
+	
+ 
+	
 
 		
 
