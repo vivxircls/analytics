@@ -11,6 +11,16 @@ from time import time
 from .threads import *
 from rest_framework.status import *
 from rest_framework.decorators import api_view
+import sqlalchemy
+
+user = 'root'
+password = 'root'
+host = '127.0.0.1'
+port = 3306
+database = 'shops_insights'
+engine=sqlalchemy.create_engine(
+		url=f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
+)
 
 #gives the shop and access token
 def give_details(outletapikey):
@@ -356,7 +366,8 @@ def give_aov_rr_rcr(request):
 			average_order_value=round(total_price/total_order,2)
 			average_units_ordered=round(total_quantity/total_order,2)
 			unique_users=df['node.email'].nunique()
-			return_customer_rate=round((len(df[df['node.email'].duplicated()])*100/unique_users),2)
+			returned_users=len(df[df['node.email'].duplicated()])
+			return_customer_rate=round((returned_users*100/unique_users),2)
 
 			data={
 					
@@ -368,7 +379,8 @@ def give_aov_rr_rcr(request):
 					'average_order_value':average_order_value,
 					'average_units_ordered':average_units_ordered,
 					'return_customer_rate':return_customer_rate,
-					'unique_users':unique_users
+					'unique_users':unique_users,
+					'returned_users':returned_users
 
 				}
 			# print(len(df))
@@ -689,7 +701,7 @@ def top_channels(request):
 	zipped_data=dict(zip(variants,counts))
 	print(zipped_data)
 	df=pd.DataFrame(zipped_data.items(),columns=['channel_name','sold_quantity'])
-	df.to_csv("top_channels.csv",index=False)
+	# df.to_csv("top_channels.csv",index=False)
 	print(df)
 
 	return JsonResponse(
@@ -727,158 +739,175 @@ def top_return_products(request):
 		'Content-Type': 'application/json'
 		}
 	
-	graphql_query = """
-	query MyQuery($filter: String) {
-	orders(first: 76, query: $filter) {
-		edges {
+	# graphql_query = """
+	# query MyQuery($filter: String) {
+	# orders(first: 76, query: $filter) {
+	# 	edges {
 		
-		node {
-			createdAt
-			returnStatus
-			name
-			lineItems(first: 10) {
-			edges {
+	# 	node {
+	# 		createdAt
+	# 		returnStatus
+	# 		name
+	# 		lineItems(first: 10) {
+	# 		edges {
 				
-				node {
-				name
-				currentQuantity
-                quantity
+	# 			node {
+	# 			name
+	# 			currentQuantity
+    #             quantity
 				
 			
-				}
-			}
+	# 			}
+	# 		}
 			
-			}
-		}
-		}
-		pageInfo {
-		endCursor
-		hasNextPage
-		}
-	}
-	}
-	"""
+	# 		}
+	# 	}
+	# 	}
+	# 	pageInfo {
+	# 	endCursor
+	# 	hasNextPage
+	# 	}
+	# }
+	# }
+	# """
 
-	variables = {
-		"filter": filterq
-	}
-	payload = {
-		"query": graphql_query, 
-		"variables": variables
-	}
+	# variables = {
+	# 	"filter": filterq
+	# }
+	# payload = {
+	# 	"query": graphql_query, 
+	# 	"variables": variables
+	# }
 	
-	response = requests.request("POST", url, headers=newheaders, json=payload)
-	data=json.loads(response.text)["data"]["orders"]
-	next_page = "True"
-	cursor=str(data["pageInfo"]["endCursor"])
-	# print(data['edges'])
+	# response = requests.request("POST", url, headers=newheaders, json=payload)
+	# data=json.loads(response.text)["data"]["orders"]
+	# next_page = "True"
+	# cursor=str(data["pageInfo"]["endCursor"])
+	# # print(data['edges'])
 
-	edges=data['edges'][0]['node']['lineItems']['edges']
-	# dummy_return_list=[data['edges'][0]['node']['returnStatus']]*len(edges)
-	df_inner=pd.json_normalize(edges)
-	# return_list=return_list+dummy_return_list
-	for i in range(1,len(data['edges'])):
-		# return_list.append(data['edges'][i]['node']['returnStatus'])
+	# edges=data['edges'][0]['node']['lineItems']['edges']
+	# # dummy_return_list=[data['edges'][0]['node']['returnStatus']]*len(edges)
+	# df_inner=pd.json_normalize(edges)
+	# # return_list=return_list+dummy_return_list
+	# for i in range(1,len(data['edges'])):
+	# 	# return_list.append(data['edges'][i]['node']['returnStatus'])
 		
-		edges=data['edges'][i]['node']['lineItems']['edges']
-		# dummy_return_list=[data['edges'][i]['node']['returnStatus']]*len(edges)
-		# return_list=return_list+dummy_return_list
-		df_inner1=pd.json_normalize(edges)
-		df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
+	# 	edges=data['edges'][i]['node']['lineItems']['edges']
+	# 	# dummy_return_list=[data['edges'][i]['node']['returnStatus']]*len(edges)
+	# 	# return_list=return_list+dummy_return_list
+	# 	df_inner1=pd.json_normalize(edges)
+	# 	df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
 
 
-	print(df_inner)
-	df_list=[df_inner]
+	# print(df_inner)
+	# df_list=[df_inner]
 
-	while next_page == "True":
-		print(69)
-	#payload = "{\"query\":\"query MyQuery {\\n  orders( first: 10) {\\n    edges {\\n      cursor\\n      node {\\n        lineItems(first: 10) {\\n          edges {\\n            node {\\n              quantity\\n              title\\n              originalTotal\\n  variantTitle\\n           }\\n          }\\n        }\\n      }\\n    }\\n    pageInfo {\\n      endCursor\\n      hasNextPage\\n    }\\n  }\\n}\",\"variables\":{}}"
-	# 
+	# while next_page == "True":
+	# 	print(69)
+	# #payload = "{\"query\":\"query MyQuery {\\n  orders( first: 10) {\\n    edges {\\n      cursor\\n      node {\\n        lineItems(first: 10) {\\n          edges {\\n            node {\\n              quantity\\n              title\\n              originalTotal\\n  variantTitle\\n           }\\n          }\\n        }\\n      }\\n    }\\n    pageInfo {\\n      endCursor\\n      hasNextPage\\n    }\\n  }\\n}\",\"variables\":{}}"
+	# # 
 
-		graphql_query = """
-		query MyQuery($filter: String, $cursor: String) {
-		orders(first: 76, query: $filter, after: $cursor) {
+	# 	graphql_query = """
+	# 	query MyQuery($filter: String, $cursor: String) {
+	# 	orders(first: 76, query: $filter, after: $cursor) {
 		
-			edges {
+	# 		edges {
 			
-			node {
-				createdAt
-				returnStatus
-				name
-				lineItems(first: 10) {
-				edges {
+	# 		node {
+	# 			createdAt
+	# 			returnStatus
+	# 			name
+	# 			lineItems(first: 10) {
+	# 			edges {
 					
-					node {
-					name
-					currentQuantity
-					quantity
+	# 				node {
+	# 				name
+	# 				currentQuantity
+	# 				quantity
 			
 					
 				
-					}
-				}
+	# 				}
+	# 			}
 				
-				}
-			}
-			}
+	# 			}
+	# 		}
+	# 		}
 			
-			pageInfo {
-			endCursor
-			hasNextPage
-			}
-		}
-		}
-		"""
+	# 		pageInfo {
+	# 		endCursor
+	# 		hasNextPage
+	# 		}
+	# 	}
+	# 	}
+	# 	"""
 		
-		variables = {"filter": filterq, "cursor": cursor}
-		payload = {"query": graphql_query, "variables": variables}
+	# 	variables = {"filter": filterq, "cursor": cursor}
+	# 	payload = {"query": graphql_query, "variables": variables}
 
 
 
 		
-		response = requests.request("POST", url, headers=newheaders, json=payload)
-		data=json.loads(response.text)["data"]["orders"]
-		next_page=str(data["pageInfo"]["hasNextPage"])
-		cursor=str(data["pageInfo"]["endCursor"])
+	# 	response = requests.request("POST", url, headers=newheaders, json=payload)
+	# 	data=json.loads(response.text)["data"]["orders"]
+	# 	next_page=str(data["pageInfo"]["hasNextPage"])
+	# 	cursor=str(data["pageInfo"]["endCursor"])
 
-		edges=data['edges'][0]['node']['lineItems']['edges']
-		# dummy_return_list=[data['edges'][0]['node']['returnStatus']]*len(edges)
-		df_inner=pd.json_normalize(edges)
-		# return_list=return_list+dummy_return_list
+	# 	edges=data['edges'][0]['node']['lineItems']['edges']
+	# 	# dummy_return_list=[data['edges'][0]['node']['returnStatus']]*len(edges)
+	# 	df_inner=pd.json_normalize(edges)
+	# 	# return_list=return_list+dummy_return_list
 		
-		for i in range(1,len(data['edges'])):
-			# return_list.append(data['edges'][i]['node']['returnStatus'])
+	# 	for i in range(1,len(data['edges'])):
+	# 		# return_list.append(data['edges'][i]['node']['returnStatus'])
 			
-			edges=data['edges'][i]['node']['lineItems']['edges']
-			# dummy_return_list=[data['edges'][i]['node']['returnStatus']]*len(edges)
-			# return_list=return_list+dummy_return_list
-			df_inner1=pd.json_normalize(edges)
-			df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
+	# 		edges=data['edges'][i]['node']['lineItems']['edges']
+	# 		# dummy_return_list=[data['edges'][i]['node']['returnStatus']]*len(edges)
+	# 		# return_list=return_list+dummy_return_list
+	# 		df_inner1=pd.json_normalize(edges)
+	# 		df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
 
-		df_list.append(df_inner)
+	# 	df_list.append(df_inner)
 		
 
-	df_final=pd.concat(df_list,axis=0,ignore_index=True)
+	# df_final=pd.concat(df_list,axis=0,ignore_index=True)
 
-	df_final.fillna({
-		'node.currentQuantity':0,
-		'node.quantity':0
-	},inplace=True)
+	# df_final.fillna({
+	# 	'node.currentQuantity':0,
+	# 	'node.quantity':0
+	# },inplace=True)
 
-	df_final=df_final[   df_final['node.currentQuantity'] < df_final['node.quantity'] ]
-	df_final['diff']=df_final['node.quantity']-df_final['node.currentQuantity']
-	# print(df_final.head(20))
-	# df_final=df_final[df_final['diff']>0]
-	df=df_final.groupby('node.name').sum()
-	# df['date']=startdate
-	# df.reset_index(inplace=True)
-	# df.to_csv("top_return_products.csv",index=False)
-	print(df)
-	# print(df.head())
-	# print(df.sort_values('diff',ascending=False).tail())
-	# print(df.shape)
-	# return_products=list(df.sort_values('diff',ascending=False).index[1:10])
-	# print(return_products)
+	# df_final=df_final[   df_final['node.currentQuantity'] < df_final['node.quantity'] ]
+	# df_final['diff']=df_final['node.quantity']-df_final['node.currentQuantity']
+	# # print(df_final.head(20))
+	# # df_final=df_final[df_final['diff']>0]
+	# df_ret_products=df_final.groupby('node.name').sum()
+	# print(df_ret_products)
+	# print("=========================================")
+	# df_ret_products['date']=startdate
+	# df_ret_products.reset_index(inplace=True)
+	# # df.to_csv("top_return_products.csv",index=False)
+	# # print(df)
+	# df_ret_products.rename(
+    # columns={
+    #     'node.name':'name',
+    #     'diff':'return_quantity'
+    # },
+    # inplace=True
+	# 		)
+	# df_ret_products.drop(columns=['node.currentQuantity','node.quantity'],inplace=True)
+	# print(df_ret_products)
+	# # print(df.head())
+	# # print(df.sort_values('diff',ascending=False).tail())
+	# # print(df.shape)
+	# # return_products=list(df.sort_values('diff',ascending=False).index[1:10])
+	# # print(return_products)
+	return_products_thread=ReturnProductsThread(filterq,shop,newheaders)
+	return_products_thread.start()
+	return_products_thread.join()
+	 
+	return_products_df=return_products_thread.df
+	return_products_df['date']=startdate
 	return JsonResponse(
 		data={
 			"data":'done'
@@ -925,25 +954,158 @@ def all_in_one(request):
 	}
  
 	insight_thread=InsightsThread(filterq,shop,newheaders)
-	
-
-	
 	products_thread=ProductsThread(filterq,shop,newheaders)
+	return_products_thread=ReturnProductsThread(filterq,shop,newheaders)
+	channels_thread=ChannelsThread(filterq,shop,newheaders)
+	
+	print("================================= created thread objects ========================")
 	insight_thread.start()
-
+	# insight_thread.join()
 	products_thread.start()
 	insight_thread.join()
 	products_thread.join()
-	data.update(insight_thread.data)
-	products_df=products_thread.df
-	print(products_df)
+	return_products_thread.start()
+	# return_products_thread.join()
+	channels_thread.start()
+	channels_thread.join()
+	return_products_thread.join()
+ 
+	print("======================= all threads started =======================")
+ 
+	# insight_thread.join()
+	# products_thread.join()
+	# return_products_thread.join()
+	# channels_thread.join()
+	
+	print("====================== all threads ended ==========================")
 
+	data.update(insight_thread.data)
+	insights_df=pd.DataFrame([data])
+	insights_df['date']=startdate
+ 
+	products_df=products_thread.df
+	products_df['date']=startdate
+	
+	# print(insights_df.columns)
+	# print(products_df)
+ 
+	return_products_df=return_products_thread.df
+	return_products_df['date']=startdate
+ 
+	# print(return_products_df)
+	channels_df=channels_thread.df
+	channels_df['date']=startdate
+	# print(channels_df)
+ 
+	
+	shop=shop.split(".")[0].replace("-",'')
+	print(shop)
+	insights_df.to_sql(
+    name=f'{shop}insights',
+    con=engine,
+    index=False,
+    if_exists='append'
+			)
+	
+	products_df.to_sql(
+    name=f'{shop}top_products',
+    con=engine,
+    index=False,
+    if_exists='append'
+		)
+ 
+	return_products_df.to_sql(
+    name=f'{shop}top_return_products',
+    con=engine,
+    index=False,
+    if_exists='append',
+    
+		)
+ 
+	channels_df.to_sql(
+    name=f'{shop}top_channels',
+    con=engine,
+    index=False,
+    if_exists='append'
+    )
+ 
+	
+ 
 	return JsonResponse(
 		data=data,
 		safe=False,
 		status=200
 	)
  
+@api_view(['POST'])
+@csrf_exempt
+def give_analytics(request):
+	startdate=request.POST.get('startdate')
+	enddate=request.POST.get('enddate')
+	outletapikey=request.headers.get('outletapikey')
+	print("=============>outletapikey",outletapikey)
+
+	shop,access=give_details(outletapikey)
+	shop=shop.split(".")[0].replace("-",'')
+	print(shop)
+
+	df=pd.read_sql_query(
+		f'''
+			select 
+		sum(datacount_for_customers) as a,
+		sum(datacount) as b,
+		sum(total_quantity) as c,
+		sum(total_price) as d,
+		sum(total_order) as e,
+		sum(total_return_quantity) as f,
+		sum(unique_users) as g,
+		sum(returned_users) as h
+		from
+		{shop}insights
+		where date between "{startdate}" and "{enddate}"
+		;
+		''',
+		engine
+
+		)
+	insights={
+       'total_quantity':df.loc[0].c,
+        'total_price':df.loc[0].d,
+        'total_order':df.loc[0].e,
+        'total_return_quantity':df.loc[0].f,
+        'return_rate':round((df.loc[0].f/df.loc[0].c)*100,2),
+        'average_order_value':round(df.loc[0].d/df.loc[0].e,2),
+        'average_units_ordered':round(df.loc[0].c/df.loc[0].e,2),
+        'return_customer_rate':round((df.loc[0].h*100)/df.loc[0].g,2),
+        'returned_users':df.loc[0].h,
+        'unique_users':df.loc[0].g
+    
+	}
+	df=pd.read_sql_query(
+    f'''
+			select name,sum(quantity) as total_quantity,
+		sum(total_price) as total_price
+		from {shop}top_products where date between "{startdate}" and "{enddate}"
+		group by name
+		;
+			''',
+			engine
+		)
+		
+	top_products_by_quantity=list(df.sort_values('total_quantity',ascending=False).name[:10])
+	top_products_by_total_price=list(df.sort_values('total_price',ascending=False).name[:10])
+	return JsonResponse(
+		data={
+			'insights':insights,
+			'top_products_by_quantity':top_products_by_quantity,
+			'top_products_by_total_price':top_products_by_total_price
+		},
+  safe=False,
+  status=200
+	)
+
+	
+
 
  
 

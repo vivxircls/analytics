@@ -265,7 +265,8 @@ class InsightsThread(Thread):
         average_order_value=round(total_price/total_order,2)
         average_units_ordered=round(total_quantity/total_order,2)
         unique_users=df['node.email'].nunique()
-        return_customer_rate=round((len(df[df['node.email'].duplicated()])*100/unique_users),2)
+        returned_users=len(df[df['node.email'].duplicated()])
+        return_customer_rate=round((returned_users*100/unique_users),2)
 
         data={
                 
@@ -277,6 +278,7 @@ class InsightsThread(Thread):
                 'average_order_value':average_order_value,
                 'average_units_ordered':average_units_ordered,
                 'return_customer_rate':return_customer_rate,
+                'returned_users':returned_users,
                 'unique_users':unique_users
 
             }
@@ -316,12 +318,12 @@ class ProductsThread(Thread):
         self.data=None
         self.df=None
     
-    def give_data(self,url,newheaders, payload):
-        response = requests.request("POST", url, headers=newheaders, json=payload)
-        data=response.json()["data"]["orders"]
-        next_page=str(data["pageInfo"]["hasNextPage"])
-        cursor=str(data["pageInfo"]["endCursor"])
-        return data,next_page,cursor
+    # def give_data(self,url,newheaders, payload):
+    #     response = requests.request("POST", url, headers=newheaders, json=payload)
+    #     data=response.json()["data"]["orders"]
+    #     next_page=str(data["pageInfo"]["hasNextPage"])
+    #     cursor=str(data["pageInfo"]["endCursor"])
+    #     return data,next_page,cursor
     
     def run(self):
         url = f"https://{self.shop}/admin/api/2023-07/graphql.json"
@@ -420,7 +422,11 @@ class ProductsThread(Thread):
                 "variables": variables
             }
         
-            data,next_page,cursor=self.give_data(url,self.newheaders, payload)
+            # data,next_page,cursor=self.give_data(url,self.newheaders, payload)
+            response = requests.request("POST", url, headers=self.newheaders, json=payload)
+            data=response.json()["data"]["orders"]
+            next_page=str(data["pageInfo"]["hasNextPage"])
+            cursor=str(data["pageInfo"]["endCursor"])
             df_inner=pd.json_normalize(data['edges'][0]['node']['lineItems']['edges'])
             for i in range(1,len(data['edges'])):
                 df_inner1=pd.json_normalize(data['edges'][i]['node']['lineItems']['edges'])
@@ -444,8 +450,310 @@ class ProductsThread(Thread):
         )
         self.df=df
         
+from time import sleep             
+class ReturnProductsThread(Thread):
+    def __init__(self,filterq,shop,newheaders):
+        Thread.__init__(self)
+        self.filterq=filterq
+        self.shop=shop
+        self.newheaders=newheaders
+        self.data=None
+        self.df=None
+        
+    def run(self):
+        url = f"https://{self.shop}/admin/api/2023-07/graphql.json"
+        graphql_query = """
+            query MyQuery($filter: String) {
+            orders(first: 76, query: $filter) {
+                edges {
                 
+                node {
+                    createdAt
+                    returnStatus
+                    name
+                    lineItems(first: 10) {
+                    edges {
+                        
+                        node {
+                        name
+                        currentQuantity
+                        quantity
+                        
+                    
+                        }
+                    }
+                    
+                    }
+                }
+                }
+                pageInfo {
+                endCursor
+                hasNextPage
+                }
+            }
+            }
+            """
+
+        variables = {
+            "filter": self.filterq
+        }
+        payload = {
+            "query": graphql_query, 
+            "variables": variables
+        }
+
+        response = requests.request("POST", url, headers=self.newheaders, json=payload)
+        data=json.loads(response.text)["data"]["orders"]
+        next_page = "True"
+        cursor=str(data["pageInfo"]["endCursor"])
+        # print(data['edges'])
+
+        edges=data['edges'][0]['node']['lineItems']['edges']
+        # dummy_return_list=[data['edges'][0]['node']['returnStatus']]*len(edges)
+        df_inner=pd.json_normalize(edges)
+        # return_list=return_list+dummy_return_list
+        for i in range(1,len(data['edges'])):
+            # return_list.append(data['edges'][i]['node']['returnStatus'])
+            
+            edges=data['edges'][i]['node']['lineItems']['edges']
+            # dummy_return_list=[data['edges'][i]['node']['returnStatus']]*len(edges)
+            # return_list=return_list+dummy_return_list
+            df_inner1=pd.json_normalize(edges)
+            df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
+
+
+        # print(df_inner)
+        df_list=[df_inner]
+        sleep(2)
+
+        while next_page == "True":
+            print(69)
+            graphql_query = """
+            query MyQuery($filter: String, $cursor: String) {
+            orders(first: 76, query: $filter, after: $cursor) {
+            
+                edges {
+                
+                node {
+                    createdAt
+                    returnStatus
+                    name
+                    lineItems(first: 10) {
+                    edges {
+                        
+                        node {
+                        name
+                        currentQuantity
+                        quantity
+                
+                        
+                    
+                        }
+                    }
+                    
+                    }
+                }
+                }
+                
+                pageInfo {
+                endCursor
+                hasNextPage
+                }
+            }
+            }
+            """
+        
+            variables = {"filter": self.filterq, "cursor": cursor}
+            payload = {"query": graphql_query, "variables": variables}
+
+
+
+            
+            response = requests.request("POST", url, headers=self.newheaders, json=payload)
+            data=json.loads(response.text)["data"]["orders"]
+            next_page=str(data["pageInfo"]["hasNextPage"])
+            cursor=str(data["pageInfo"]["endCursor"])
+
+            edges=data['edges'][0]['node']['lineItems']['edges']
+            # dummy_return_list=[data['edges'][0]['node']['returnStatus']]*len(edges)
+            df_inner=pd.json_normalize(edges)
+            # return_list=return_list+dummy_return_list
+            
+            for i in range(1,len(data['edges'])):
+                # return_list.append(data['edges'][i]['node']['returnStatus'])
+                
+                edges=data['edges'][i]['node']['lineItems']['edges']
+                # dummy_return_list=[data['edges'][i]['node']['returnStatus']]*len(edges)
+                # return_list=return_list+dummy_return_list
+                df_inner1=pd.json_normalize(edges)
+                df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
+
+            df_list.append(df_inner)
+            
+
+        df_final=pd.concat(df_list,axis=0,ignore_index=True)
+
+        df_final.fillna({
+            'node.currentQuantity':0,
+            'node.quantity':0
+        },inplace=True)
+
+        df_final=df_final[   df_final['node.currentQuantity'] < df_final['node.quantity'] ]
+        df_final['diff']=df_final['node.quantity']-df_final['node.currentQuantity']
+        # print(df_final.head(20))
+        # df_final=df_final[df_final['diff']>0]
+        df_ret_products=df_final.groupby('node.name').sum()
+        # print(df_ret_products)
+        print("=========================================")
+        # df_ret_products['date']=startdate
+        df_ret_products.reset_index(inplace=True)
+        # df.to_csv("top_return_products.csv",index=False)
+        # print(df)
+        df_ret_products.rename(
+        columns={
+            'node.name':'name',
+            'diff':'return_quantity'
+        },
+        inplace=True
+                )
+        df_ret_products.drop(columns=['node.currentQuantity','node.quantity'],inplace=True)
+        # print(df_ret_products)
+        self.df=df_ret_products
+        # print(df.head())
+        # print(df.sort_values('diff',ascending=False).tail())
+        # print(df.shape)
+        # return_products=list(df.sort_values('diff',ascending=False).index[1:10])
+        # print(return_products)
+     
+class ChannelsThread(Thread):
+    def __init__(self,filterq,shop,newheaders):
+        Thread.__init__(self)
+        self.filterq=filterq
+        self.shop=shop
+        self.newheaders=newheaders
+        self.data=None
+        self.df=None     
     
-        
-        
-        
+    def run(self):
+        url = f"https://{self.shop}/admin/api/2023-07/graphql.json"
+
+	
+	
+        graphql_query = """
+                query MyQuery($filter: String) {
+                        orders(first: 250, query: $filter) {
+                        edges {
+                            
+                            node {
+                            channel {
+                                name
+                            }
+                            createdAt
+                            currentSubtotalLineItemsQuantity
+                            totalDiscounts
+                            totalPrice
+                            totalRefunded
+                            totalShippingPrice
+                            totalTax
+                            totalWeight
+                            }
+                        }
+                        pageInfo {
+                            endCursor
+                            hasNextPage
+                        }
+                        }
+                    }	
+                """
+
+	# Your string variable
+	# filterq = "your_filter_value"  # Replace with the actual filter value
+
+	# Variables as a dictionary
+        variables = {
+            "filter": self.filterq
+        }
+
+        # JSON payload including the query and variables
+        payload = {
+            "query": graphql_query,
+            "variables": variables
+        }
+        response = requests.request("POST", url, headers=self.newheaders, json=payload)
+        data=json.loads(response.text)["data"]["orders"]
+        next_page = "True"
+        cursor=str(data["pageInfo"]["endCursor"])
+
+        df=pd.json_normalize(data['edges'])
+
+        while next_page == "True":
+            print(69)
+            
+            graphql_query = """
+            query MyQuery($filter: String, $cursor: String) {
+            orders(
+                after: $cursor,
+                first: 250,
+                query: $filter
+            ) {
+                edges {
+                cursor
+                node {
+                    channel {
+                    name
+                    }
+                    createdAt
+                    currentSubtotalLineItemsQuantity
+                    totalDiscounts
+                    totalPrice
+                    totalRefunded
+                    totalShippingPrice
+                    totalTax
+                    totalWeight
+                }
+                }
+                pageInfo {
+                endCursor
+                hasNextPage
+                }
+            }
+            }
+            """
+
+            # Variables
+            variables = {
+                "filter": self.filterq,
+                "cursor": cursor
+            }
+            
+            # Payload
+            payload = {
+                "query": graphql_query,
+                "variables": variables
+            }
+            
+
+            response = requests.request("POST", url, headers=self.newheaders, json=payload)
+            #print(json.loads(response.text))
+            data=json.loads(response.text)["data"]["orders"]
+            next_page = str(data["pageInfo"]["hasNextPage"])
+            cursor=str(data["pageInfo"]["endCursor"])
+            df1=pd.json_normalize(data['edges'])
+            df=pd.concat([df,df1],axis=0)
+
+        df['node.channel.name'].fillna("Not available",inplace=True)
+        df_counted=df['node.channel.name'].value_counts()
+        counts=df_counted.values
+        variants=list(df_counted.index)
+        # print(counts)
+        # print(variants)
+        zipped_data=dict(zip(variants,counts))
+        # print(zipped_data)
+        df=pd.DataFrame(zipped_data.items(),columns=['channel_name','sold_quantity'])
+        # df.to_csv("top_channels.csv",index=False)
+        # print(df)
+        self.df=df
+
+
+            
+            
