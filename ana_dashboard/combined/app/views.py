@@ -919,15 +919,13 @@ def top_return_products(request):
 @api_view(['POST'])
 @csrf_exempt
 def all_in_one(request):
-	cursor=request.POST.get('cursor')
+	# cursor=request.POST.get('cursor')
 	startdate=request.POST.get('startdate')
 	enddate=request.POST.get('enddate')
-	next_page=request.POST.get('next_page')
+	# next_page=request.POST.get('next_page')
 
-	# =request.POST.get('cursor'),request.POST.get('startdate'),request.POST.get('enddate')
 	startdate_q=startdate+'T00:00:00Z' 
 	enddate=enddate+'T23:59:59Z' 
-	# print(startdate,enddate)
 
 	filterq=f"created_at:>='{startdate_q}' AND created_at:<='{enddate}'"
 	outletapikey=request.headers.get('outletapikey')
@@ -1037,6 +1035,96 @@ def all_in_one(request):
 		status=200
 	)
  
+ 
+ 
+ 
+# Dashboard main api for custom,weekly and monthly data
+def give_data_from_sql(shop,startdate,enddate):
+    
+	df=pd.read_sql_query(
+	f'''
+	select 
+	sum(datacount_for_customers) as a,
+	sum(datacount) as b,
+	sum(total_quantity) as c,
+	sum(total_price) as d,
+	sum(total_order) as e,
+	sum(total_return_quantity) as f,
+	sum(unique_users) as g,
+	sum(returned_users) as h
+	from
+	{shop}insights
+	where date between "{startdate}" and "{enddate}"
+	;
+	''',
+	engine
+
+	)
+	insights={
+	'total_quantity':df.loc[0].c,
+	'total_price':df.loc[0].d,
+	'total_order':df.loc[0].e,
+	'total_return_quantity':df.loc[0].f,
+	'return_rate':round((df.loc[0].f/df.loc[0].c)*100,2),
+	'average_order_value':round(df.loc[0].d/df.loc[0].e,2),
+	'average_units_ordered':round(df.loc[0].c/df.loc[0].e,2),
+	'return_customer_rate':round((df.loc[0].h*100)/df.loc[0].g,2),
+	'returned_users':df.loc[0].h,
+	'unique_users':df.loc[0].g
+
+	}
+	
+	df=pd.read_sql_query(
+	f'''
+		select name,sum(quantity) as total_quantity,
+		sum(total_price) as total_price
+		from {shop}top_products where date between "{startdate}" and "{enddate}" and name not like "Free%"
+		group by name
+		;
+		''',
+		engine
+	)
+
+	top_products_by_quantity=list(df.sort_values('total_quantity',ascending=False).name[:10])
+	top_products_by_total_price=list(df.sort_values('total_price',ascending=False).name[:10])
+
+	df=pd.read_sql_query(
+	'''
+	select name ,sum(return_quantity) as total_return_quantity
+	from bombayshavingtop_return_products
+	where date between "2024-01-16" and "2024-01-18" and name not like "%Free%"
+	group by name
+	order by total_return_quantity desc
+	limit 10;
+	''',
+	engine
+			)
+
+	top_return_products=list(df.name)
+
+
+	df=pd.read_sql_query(
+	f'''
+	select channel_name,sum(sold_quantity) as total_quantity
+	from {shop}top_channels 
+	where date between "{startdate}" and "{enddate}"
+	group by channel_name
+	order by total_quantity ;
+	''',
+	engine
+	)
+	top_channels=list(df.channel_name)
+
+	data={
+		'insights':insights,
+		'top_products_by_quantity':top_products_by_quantity,
+		'top_products_by_total_price':top_products_by_total_price,
+		'top_return_products':top_return_products,
+		'top_channels':top_channels
+	}
+	return data
+       
+    
 @api_view(['POST'])
 @csrf_exempt
 def give_analytics(request):
@@ -1049,61 +1137,15 @@ def give_analytics(request):
 	shop=shop.split(".")[0].replace("-",'')
 	print(shop)
 
-	df=pd.read_sql_query(
-		f'''
-			select 
-		sum(datacount_for_customers) as a,
-		sum(datacount) as b,
-		sum(total_quantity) as c,
-		sum(total_price) as d,
-		sum(total_order) as e,
-		sum(total_return_quantity) as f,
-		sum(unique_users) as g,
-		sum(returned_users) as h
-		from
-		{shop}insights
-		where date between "{startdate}" and "{enddate}"
-		;
-		''',
-		engine
-
-		)
-	insights={
-       'total_quantity':df.loc[0].c,
-        'total_price':df.loc[0].d,
-        'total_order':df.loc[0].e,
-        'total_return_quantity':df.loc[0].f,
-        'return_rate':round((df.loc[0].f/df.loc[0].c)*100,2),
-        'average_order_value':round(df.loc[0].d/df.loc[0].e,2),
-        'average_units_ordered':round(df.loc[0].c/df.loc[0].e,2),
-        'return_customer_rate':round((df.loc[0].h*100)/df.loc[0].g,2),
-        'returned_users':df.loc[0].h,
-        'unique_users':df.loc[0].g
-    
-	}
-	df=pd.read_sql_query(
-    f'''
-			select name,sum(quantity) as total_quantity,
-		sum(total_price) as total_price
-		from {shop}top_products where date between "{startdate}" and "{enddate}"
-		group by name
-		;
-			''',
-			engine
-		)
-		
-	top_products_by_quantity=list(df.sort_values('total_quantity',ascending=False).name[:10])
-	top_products_by_total_price=list(df.sort_values('total_price',ascending=False).name[:10])
+	
+	data=give_data_from_sql(shop,startdate,enddate)
+	
 	return JsonResponse(
-		data={
-			'insights':insights,
-			'top_products_by_quantity':top_products_by_quantity,
-			'top_products_by_total_price':top_products_by_total_price
-		},
-  safe=False,
-  status=200
+		data=data,
+		safe=False,
+		status=200
 	)
-
+###############################################################
 	
 
 
