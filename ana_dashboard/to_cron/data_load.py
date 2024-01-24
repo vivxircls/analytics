@@ -21,7 +21,7 @@ def give_details(outletapikey):
 
 
 
-dates=date_range(start="2023-12-03",end="2023-12-31")
+dates=date_range(start="2023-11-28",end="2023-11-30")
 
 user = 'root'
 password = 'root'
@@ -34,8 +34,8 @@ engine=sqlalchemy.create_engine(
 )
 
 
-# outletapikey="KwbxBMaHmIQ2WXHq4E4t3guJ7uYczUiJsEcxsi6ZkmE="
-outletapikey="Fv14sMRkz8uYqd3VMbKy5U+7h6QE4Rcb7MeG1d/PoXU="
+outletapikey="KwbxBMaHmIQ2WXHq4E4t3guJ7uYczUiJsEcxsi6ZkmE="
+# outletapikey="Fv14sMRkz8uYqd3VMbKy5U+7h6QE4Rcb7MeG1d/PoXU="
 # outletapikey=request.headers.get('outletapikey')
 print("=============>outletapikey",outletapikey)
 

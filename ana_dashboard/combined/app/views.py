@@ -12,7 +12,9 @@ from .threads import *
 from rest_framework.status import *
 from rest_framework.decorators import api_view
 import sqlalchemy
+from time import sleep
 
+# database connection setup
 user = 'root'
 password = 'root'
 host = '127.0.0.1'
@@ -22,20 +24,28 @@ engine=sqlalchemy.create_engine(
 		url=f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
 )
 
+
+################################### Main APIs ##########################################
+
 #gives the shop and access token
 def give_details(outletapikey):
 	'''
-	gives the shop name and access token of it
+	gives the shop name and access token of the corresponding outletapikey
+	if xircls server is down then will return False
+	else the shop  and accesss token of it 
 	'''
-	url=" https://api.demo.xircls.in/utility/api/v1/get_shopname_access_token/"
-	headers = {'api-key': outletapikey, 'Content-Type': 'application/json'}
-	response = requests.request("POST", url, headers=headers)
-	# print("===========>response",response)
-	data=response.json()
-	shop=data["response"]["shop"]
-	access=data["response"]["access_token"]
-	print("=============>access======>",access,shop)
-	return shop,access
+	try:
+		url=" https://api.demo.xircls.in/utility/api/v1/get_shopname_access_token/"
+		headers = {'api-key': outletapikey, 'Content-Type': 'application/json'}
+		response = requests.request("POST", url, headers=headers)
+		# print("===========>response",response)
+		data=response.json()
+		shop=data["response"]["shop"]
+		access=data["response"]["access_token"]
+		print("=============>access======>",access,shop)
+		return shop,access
+	except:
+		return False , False
 
 def give_data(url,newheaders, payload):
 	response = requests.request("POST", url, headers=newheaders, json=payload)
@@ -44,18 +54,6 @@ def give_data(url,newheaders, payload):
 	cursor=str(data["pageInfo"]["endCursor"])
 	return data,next_page,cursor
 
-# def give_payload(graphql_query,filterq,cursor=''):
-	# variables = {
-    # 	"filterq": filterq
-	# 	}
-
-	# # JSON payload including the query and variables
-	# payload = {
-	# 	"query": graphql_query,
-	# 	"variables": variables
-	# }
-
-	# return payload
 
 
 def give_graphql_query_for_while(filterq,cursor):
@@ -99,139 +97,781 @@ def give_graphql_query_for_while(filterq,cursor):
     return payload
 
 
-# def salesalltime(request,datacount,filterq,shop,newheaders):
-# 	url = f"https://{shop}/admin/api/2023-07/graphql.json"
 
-# 	cursor=''
-# 	graphql_query = """ 
-# 				query MyQuery($filter: String) {
-# 				orders(
-# 					reverse: true
-# 					first: 25
-# 					query: $filter
-# 				) {
-# 					edges {
-# 					cursor
-# 					node {
-# 						name
-# 						createdAt
-# 						displayFinancialStatus
-# 						displayFulfillmentStatus
-# 						totalPrice
-# 						email
-# 						subtotalPrice
-# 						customer {
-# 						addresses {
-# 							country
-# 							province
-# 							city
-# 							lastName
-# 							firstName
-# 						}
-# 						}
-# 						totalDiscounts
-# 						fulfillments(first: 10) {
-# 						createdAt
-# 						}
-# 						discountApplications(first: 10) {
-# 						edges {
-# 							cursor
-# 							node {
-# 							value {
-# 								... on PricingPercentageValue {
-# 								__typename
-# 								percentage
-# 								}
-# 								... on MoneyV2 {
-# 								__typename
-# 								amount
-# 								}
-# 							}
-# 							}
-# 						}
-# 						}
-# 						shippingAddress {
-# 						city
-# 						country
-# 						province
-# 						}
-# 						customer {
-# 						addresses {
-# 							country
-# 							province
-# 							city
-# 						}
-# 						displayName
-# 						}
-# 						currencyCode
-# 						discountCode
-# 					}
-# 					}
-# 					pageInfo {
-# 					endCursor
-# 					hasNextPage
-# 					}
-# 				}
-# 				}
-# 				"""
-# 	variables = {
-# 		"filter": filterq
-# 	}
+@api_view(['POST'])
+@csrf_exempt
+def daily_give_insights(request):
+    cursor=request.POST.get('cursor')
+    startdate=request.POST.get('startdate')
+    enddate=request.POST.get('enddate')
+    next_page=request.POST.get('next_page')
+    startdate=startdate+'T00:00:00Z' 
+    enddate=enddate+'T23:59:59Z' 
+	# takes data from the request body
 
-# 	# JSON payload including the query and variables
-# 	payload = {
-# 		"query": graphql_query,
-# 		"variables": variables
-# 	}
+    filterq=f"created_at:>='{startdate}' AND created_at:<='{enddate}'"
+    outletapikey=request.headers.get('outletapikey')
+    # print("=============>outletapikey",outletapikey)
 
-# 	response = requests.request("POST", url, headers=newheaders, json=payload)
-# 	data=json.loads(response.text)["data"]["orders"]
-# 	if data["edges"]!=[]:
-# 		next_page =str(data["pageInfo"]["hasNextPage"])
-# 		cursor=str(data["pageInfo"]["endCursor"])
-# 		rlocation=[request.GET.get('location') if request.GET.get('location') not in [None,''] else True][0]
-# 		dic=[]
-# 		for i in data["edges"]:
-# 			data=i["node"]
-# 			if data["customer"] not in [None,{}] and 'addresses' in data["customer"].keys() and data["customer"]['addresses'] not in [None,{}] and rlocation!=True:location=data["customer"]["addresses"][0]["country"]
-# 			else:location=True
-# 			if rlocation==location :
-# 				d=dict()
-# 				d['created_at'],d['currency'],d["current_subtotal_price"],d["current_total_discounts"],d["current_total_price"],d["email"],d["financial_status"],d["fulfillment_status"],d["order_number"]=data['createdAt'],data['currencyCode'],data["subtotalPrice"],data["totalDiscounts"],data["totalPrice"],data["email"],data["displayFinancialStatus"],data["displayFulfillmentStatus"],data["name"]
-# 				if data["customer"] not in [None,{}] and 'addresses' in data["customer"].keys() and data["customer"]['addresses'] not in [None,{}]:d["customer"]=[data["customer"]["addresses"][0]]
-# 				if data["discountApplications"]["edges"] not in [[],None]:
-# 					value=data["discountApplications"]["edges"][0]["node"]["value"]
-# 					d["value"],d["value_type"]=value["amount"]  if 'amount' in value.keys() else value["percentage"],value["__typename"]
-# 					d['code']=data["discountCode"]
-# 				if data["shippingAddress"] not in [{},None]:d["shipping_address"]=[data["shippingAddress"]]
-# 				d["timetofulfill"]=(dt.datetime.strptime(data["fulfillments"][0]["createdAt"],"%Y-%m-%dT%H:%M:%SZ")-dt.datetime.strptime(data["createdAt"], "%Y-%m-%dT%H:%M:%SZ")).days if data["fulfillments"]!=[] else 'unfulfilled'
-# 				dic.append(d)
-# 		alltime_sales_data={'orders':dic,'next_page':next_page,'cursor':cursor,'count':datacount['count']}
-# 	else:
-# 		alltime_sales_data={'orders':[],'next_page':'False','cursor':"",'count':datacount['count']}
-# 	# print("alltime sales data=>",alltime_sales_data)
-# 	return alltime_sales_data
+    shop,access=give_details(outletapikey)
+    if shop==False:
+        return JsonResponse(
+                data={
+                    'mssg':'XIRCLS server down....'
+                },
+                status=HTTP_204_NO_CONTENT
+            )
+    newheaders = {
+        'X-Shopify-Access-Token': access,'Content-Type': 'application/json'
+        }
+    
+    filtercount=f"&created_at_min={startdate}&created_at_max={enddate}"
+    urlcount = f"https://{shop}/admin/api/2023-10/orders/count.json?status=any{filtercount}"
+    datacount = json.loads(requests.get(urlcount, headers=newheaders).text)
 
-# def customers(request,datacount,filterq,shop,newheaders):
-# 	url = f"https://{shop}/admin/api/2023-07/graphql.json"
-# 	payload = "{\"query\":\"query MyQuery {\\n  customers(reverse: true, \\n    query: \\\"%s\\\"\\n first: 25) {\\n    edges {\\n      cursor\\n      node {\\n        acceptsMarketing\\n        createdAt\\n        email\\n        displayName\\n              numberOfOrders\\n        addresses {\\n          country\\n          city\\n          province\\n        }\\n        amountSpent {\\n          amount\\n        }\\n      }\\n    }\\n    pageInfo {\\n      endCursor\\n      hasNextPage\\n    }\\n   \\n  }\\n}\",\"variables\":{}}"%(filterq)
+    url = f"https://{shop}/admin/api/2023-07/graphql.json"
+    # alltime_sales_data=salesalltime(request,datacount,filterq,shop,newheaders)
 
-# 	response = requests.request("POST", url, headers=newheaders, data=payload)
-# 	data=json.loads(response.text)['data']['customers']
-# 	cursor=str(data["pageInfo"]["endCursor"])
-# 	next_page=str(data["pageInfo"]["hasNextPage"])
-# 	if data["edges"]!=[]:
-# 		#cursor=str(data["pageInfo"]["endCursor"])
-# 		cust=[]
-# 		for i in data["edges"]:
-# 			custdata={}
-# 			custdata['email'],custdata['name'],custdata['created_at'],custdata['accept_email_marketing'],custdata['orders_count'],custdata['total_spent'],custdata['country'],custdata['average_order_value']=i["node"]['email'],i["node"]['displayName'],i["node"]["createdAt"],i["node"]['acceptsMarketing'],i["node"]['numberOfOrders'],float(i["node"]['amountSpent']['amount']),i["node"]['addresses'][0]['country'] if i["node"]['addresses']!=[] else None,[round(float(i["node"]['amountSpent']['amount'])/int(i['node']['numberOfOrders']),2) if int(i['node']['numberOfOrders'])!=0 else 0][0]
-# 			cust.append(custdata)
-# 		data={'data':cust,'next_page':next_page,'cursor':cursor,'count':datacount["count"]}
-# 	else:
-# 		data={'data':[],'next_page':'False','cursor':'','count':datacount["count"]} 
+
+    
+
+
+    # customers api
+    urlcount_for_customers = f"https://{shop}/admin/api/2023-10/customers/count.json?status=any{filtercount}"
+    # newheaders = {'X-Shopify-Access-Token': access,'Content-Type': 'application/json'}
+    datacount_for_customers = json.loads(requests.get(urlcount_for_customers, headers=newheaders).text)
+   
+
+    # s_t=SalesThread(request,datacount,filterq,shop,newheaders)
+    # c_t=CustomerThread(request,datacount_for_customers,filterq,shop,newheaders)
+    # s_t.start()
+    # c_t.start()
+    # s_t.join()
+    # c_t.join()
+    # alltime_sales_data=s_t.data
+    # cutomers_data=c_t.data
+
+    data={
+        'datacount':datacount['count'],
+        'datacount_for_customers':datacount_for_customers['count']
+    }
+    
+    return JsonResponse(
+        data=data,
+        status=200
+        )
+
+@api_view(['POST'])
+@csrf_exempt
+def daily_give_aov_rr_rcr(request):
+	try:
+		startdate,enddate=request.POST.get('startdate'),request.POST.get('enddate')
+		startdate=startdate+'T00:00:00Z' 
+		enddate=enddate+'T23:59:59Z' 
+
+		outletapikey=request.headers.get('outletapikey')
+
+		filterq=f"created_at:>='{startdate}' AND created_at:<='{enddate}'" 
+
+		shop,access=give_details(outletapikey)
+		if shop==False:
+			return JsonResponse(
+				data={
+					'mssg':'XIRCLS server down....'
+				},
+				status=HTTP_400_BAD_REQUEST
+			)
+		else:
+			url = f"https://{shop}/admin/api/2023-10/graphql.json"
+			newheaders = {
+			'X-Shopify-Access-Token':access,
+			'Content-Type': 'application/json'
+				}
+			graphql_query = """
+			query MyQuery($filterq: String) {
+			orders(query: $filterq, first: 250) {
+				edges {
+				cursor
+				node {
+					totalPrice
+					createdAt
+					currentSubtotalLineItemsQuantity
+					subtotalLineItemsQuantity
+					email
+				}
+				}
+				pageInfo {
+				endCursor
+				hasNextPage
+				}
+			}
+			}
+			"""
+
+			variables = {
+				"filterq": filterq
+			}
+
+			# JSON payload including the query and variables
+			payload = {
+				"query": graphql_query,
+				"variables": variables
+			}
+
+			response = requests.post( url, headers=newheaders, json=payload) #call shopify graphql
+
+			data=json.loads(response.text)["data"]["orders"]
+
+			next_page =str(data["pageInfo"]["hasNextPage"])
+			cursor=str(data["pageInfo"]["endCursor"])
+			df=pd.json_normalize(data['edges'])  #convert json data to pandas df as it is easier for processing the numeric data
+
+			while next_page == "True":
+				# loop till we get all the data from the required pages of the shopify graphql
+				payload=give_graphql_query_for_while(filterq,cursor)
+				response = requests.post( url, headers=newheaders, json=payload)
+				data=json.loads(response.text)["data"]["orders"]
+				next_page=str(data["pageInfo"]["hasNextPage"])
+				cursor=str(data["pageInfo"]["endCursor"])
+				df1=pd.json_normalize(data['edges'])
+				df=pd.concat([df,df1],axis=0)
+
+			# performing data analytical calculations
+			total_quantity=int(df['node.currentSubtotalLineItemsQuantity'].sum())
+			total_price=round(df['node.totalPrice'].astype('float').sum(),2)
+			total_order=int(len(df)) 
+			total_return_quantity=sum(df["node.subtotalLineItemsQuantity"].astype(float)-df["node.currentSubtotalLineItemsQuantity"].astype(float))
+			return_rate=round((total_return_quantity/total_quantity)*100,2)
+			average_order_value=round(total_price/total_order,2)
+			average_units_ordered=round(total_quantity/total_order,2)
+			unique_users=df['node.email'].nunique()
+			returned_users=len(df[df['node.email'].duplicated()])
+			return_customer_rate=round((returned_users*100/unique_users),2)
+
+			data={
+					
+				'total_quantity':total_quantity,
+				'total_price':total_price,
+				'total_order':total_order,
+				'total_return_quantity':total_return_quantity,
+				'return_rate':return_rate,
+				'average_order_value':average_order_value,
+				'average_units_ordered':average_units_ordered,
+				'return_customer_rate':return_customer_rate,
+				'unique_users':unique_users,
+				'returned_users':returned_users
+
+				}
+   
+			data.update({'mssg':'data processed successfully'})
+			# return the data
+			return JsonResponse(data=data,
+				safe=False,
+				status=HTTP_200_OK
+			)
+	except:
+		# error handling if any error from shopify comes
+		return JsonResponse(data=
+            {
+                'mssg':'Error occurred from shopify.com'
+            },
+            safe=False,
+            status=HTTP_204_NO_CONTENT
+        )
+
+@api_view(['POST'])
+@csrf_exempt
+def daily_top_products(request):
+
+    cursor=request.POST.get('cursor')
+    startdate=request.POST.get('startdate')
+    enddate=request.POST.get('enddate')
+    next_page=request.POST.get('next_page')
+
+    startdate_q=startdate+'T00:00:00Z' 
+    enddate=enddate+'T23:59:59Z' 
+
+
+    filterq=f"created_at:>='{startdate_q}' AND created_at:<='{enddate}'"
+
+    outletapikey=request.headers.get('outletapikey')
+
+
+    shop,access=give_details(outletapikey)
+    if shop ==False:
+        return JsonResponse(
+                data={
+                    'mssg':'XIRCLS server down....'
+                },
+  				status=HTTP_400_BAD_REQUEST
+            )
+    else:
+        url = f"https://{shop}/admin/api/2023-07/graphql.json"
+
+        newheaders = {
+            'X-Shopify-Access-Token': access,
+            'Content-Type': 'application/json'
+            }
+        graphql_query = """
+        query MyQuery($filter: String) {
+        orders(first: 70, query: $filter) {
+            edges {
+            cursor
+            node {
+                createdAt
+                lineItems (first: 10){
+                edges {
+                    node {
+                    quantity
+                    title
+                    originalTotal
+                    variantTitle
+                    }
+                }
+                
+                }
+            }
+            }
+            pageInfo {
+            endCursor
+            hasNextPage
+            }
+        }
+        }
+        """
+
+        # Variables as a dictionary
+        variables = {
+            "filter": filterq
+        }
+        # JSON payload including the query and variables
+        payload = {
+            "query": graphql_query,
+            "variables": variables
+        }
+
+        response = requests.request("POST", url, headers=newheaders, json=payload)
+        data=json.loads(response.text)["data"]["orders"]
+        next_page = "True"
+        cursor=str(data["pageInfo"]["endCursor"])
+    
+        df_inner=pd.json_normalize(data['edges'][0]['node']['lineItems']['edges'])
+        for i in range(1,len(data['edges'])):
+            df_inner1=pd.json_normalize(data['edges'][i]['node']['lineItems']['edges'])
+            df_inner=pd.concat([df_inner,df_inner1],axis=0)
+        df_list=[df_inner]
+
+        while next_page == "True":
+
+            graphql_query = """
+                    query MyQuery($cursor: String, $filterq: String) {
+                    orders(after: $cursor, first: 70, query: $filterq) {
+                        edges {
+                        cursor
+                        node {
+                            createdAt
+                            lineItems(first: 10) {
+                            edges {
+                                node {
+                                quantity
+                                title
+                                originalTotal
+                                variantTitle
+                                }
+                            }
+                            }
+                        }
+                        }
+                        pageInfo {
+                        endCursor
+                        hasNextPage
+                        }
+                    }
+                    }
+                    """
+
+        	# Variables as a dictionary
+            variables = {
+                "cursor": cursor,
+                "filterq": filterq
+            }
+            
+            # JSON payload including the query and variables
+            payload = {
+                "query": graphql_query,
+                "variables": variables
+            }
+        
+            data,next_page,cursor=give_data(url,newheaders, payload)
+            df_inner=pd.json_normalize(data['edges'][0]['node']['lineItems']['edges'])
+            for i in range(1,len(data['edges'])):
+                df_inner1=pd.json_normalize(data['edges'][i]['node']['lineItems']['edges'])
+                df_inner=pd.concat([df_inner,df_inner1],axis=0)
+            
+
+            df_list.append(df_inner)
+
+        df=pd.concat(df_list,axis=0)
+        df['node.originalTotal']=df['node.originalTotal'].apply(pd.to_numeric)
+        df=df.groupby(by='node.title').sum()
+
+		# group by the product name and calculate the sum of the total_price  and the total_quantity and only return the top 10 products by quantity and by total_price
+        top_products_by_total_price=list(df.sort_values('node.originalTotal',ascending=False).index[:10])
+        
+        top_products_by_units_sold=list(df.sort_values('node.quantity',ascending=False).index[1:10])
+
+        return JsonResponse(
+            data={
+                'top_products_by_total_price':top_products_by_total_price,
+                'top_products_by_units_sold':top_products_by_units_sold,
+                'mssg':'done'
+            },
+            status=200
+        )
+
+
+@api_view(['POST'])
+@csrf_exempt
+def daily_top_channels(request):
+	cursor=request.POST.get('cursor')
+	startdate=request.POST.get('startdate')
+	enddate=request.POST.get('enddate')
+	next_page=request.POST.get('next_page')
 	
-# 	return data
+
+	startdate=startdate+'T00:00:00Z' 
+	enddate=enddate+'T23:59:59Z' 
+
+
+	filterq=f"created_at:>='{startdate}' AND created_at:<='{enddate}'"
+	outletapikey=request.headers.get('outletapikey')
+	print("=============>outletapikey",outletapikey)
+
+	shop,access=give_details(outletapikey)
+	if shop==False:
+		return JsonResponse(
+                data={
+                    'mssg':'XIRCLS server down....'
+                },
+                status=HTTP_400_BAD_REQUEST
+            )
+  
+	url = f"https://{shop}/admin/api/2023-07/graphql.json"
+
+	newheaders = {
+		'X-Shopify-Access-Token': access,
+		'Content-Type': 'application/json'
+		}
+	
+	graphql_query = """
+	query MyQuery($filter: String) {
+		orders(first: 250, query: $filter) {
+		edges {
+			
+			node {
+			channel {
+				name
+					}
+				createdAt
+				currentSubtotalLineItemsQuantity
+				totalDiscounts
+				totalPrice
+				totalRefunded
+				totalShippingPrice
+				totalTax
+				totalWeight
+				}
+				}
+		pageInfo {
+			endCursor
+			hasNextPage
+				}
+		}
+	}	
+	"""
+
+	# Variables as a dictionary
+	variables = {
+		"filter": filterq
+	}
+
+	# JSON payload including the query and variables
+	payload = {
+		"query": graphql_query,
+		"variables": variables
+	}
+	response = requests.post( url, headers=newheaders, json=payload)
+	data=json.loads(response.text)["data"]["orders"]
+	next_page = "True"
+	cursor=str(data["pageInfo"]["endCursor"])
+
+	df=pd.json_normalize(data['edges'])
+
+	while next_page == "True":
+		graphql_query = """
+		query MyQuery($filter: String, $cursor: String) {
+		orders(
+			after: $cursor,
+			first: 250,
+			query: $filter
+		) {
+			edges {
+			cursor
+			node {
+				channel {
+				name
+				}
+				createdAt
+				currentSubtotalLineItemsQuantity
+				totalDiscounts
+				totalPrice
+				totalRefunded
+				totalShippingPrice
+				totalTax
+				totalWeight
+			}
+			}
+			pageInfo {
+			endCursor
+			hasNextPage
+			}
+		}
+		}
+		"""
+
+		# Variables
+		variables = {
+			"filter": filterq,
+			"cursor": cursor
+		}
+		
+		# Payload
+		payload = {
+			"query": graphql_query,
+			"variables": variables
+		}
+		
+
+		response = requests.request("POST", url, headers=newheaders, json=payload)
+		data=json.loads(response.text)["data"]["orders"]
+		next_page = str(data["pageInfo"]["hasNextPage"])
+		cursor=str(data["pageInfo"]["endCursor"])
+		df1=pd.json_normalize(data['edges'])
+		df=pd.concat([df,df1],axis=0)
+
+	# when the channel name is not available then we get Nan and we will fill it by Not available
+	df['node.channel.name'].fillna("Not available",inplace=True)
+	df_counted=df['node.channel.name'].value_counts()
+	counts=list(df_counted.values)
+	counts=map(str,counts)
+	variants=list(df_counted.index)
+	zipped_data=dict(zip(variants,counts))
+	print(zipped_data)
+	
+
+	return JsonResponse(
+		data={
+			'top_products_by_channels':[zipped_data]
+		}
+	)
+
+
+@api_view(['POST'])
+@csrf_exempt
+def daily_top_return_products(request):
+
+	cursor=request.POST.get('cursor')
+	startdate=request.POST.get('startdate')
+	enddate=request.POST.get('enddate')
+	next_page=request.POST.get('next_page')
+	
+
+	startdate_q=startdate+'T00:00:00Z' 
+	enddate=enddate+'T23:59:59Z' 
+
+	filterq=f"created_at:>='{startdate_q}' AND created_at:<='{enddate}'"
+	outletapikey=request.headers.get('outletapikey')
+	print("=============>outletapikey",outletapikey)
+
+	shop,access=give_details(outletapikey)
+	if shop==False:
+		return JsonResponse(
+                data={
+                    'mssg':'XIRCLS server down....'
+                },
+     			status=HTTP_400_BAD_REQUEST
+            )
+  
+	url = f"https://{shop}/admin/api/2023-07/graphql.json"
+
+	newheaders = {
+		'X-Shopify-Access-Token': access,
+		'Content-Type': 'application/json'
+		}
+	
+	graphql_query = """
+	query MyQuery($filter: String) {
+	orders(first: 76, query: $filter) {
+		edges {
+		
+		node {
+			createdAt
+			returnStatus
+			name
+			lineItems(first: 10) {
+			edges {
+				
+				node {
+				name
+				currentQuantity
+                quantity
+				}
+			}
+			
+			}
+		}
+		}
+		pageInfo {
+		endCursor
+		hasNextPage
+		}
+	}
+	}
+	"""
+
+	variables = {
+		"filter": filterq
+	}
+	payload = {
+		"query": graphql_query, 
+		"variables": variables
+	}
+	
+	response = requests.request("POST", url, headers=newheaders, json=payload)
+	data=json.loads(response.text)["data"]["orders"]
+	next_page = "True"
+	cursor=str(data["pageInfo"]["endCursor"])
+
+
+	edges=data['edges'][0]['node']['lineItems']['edges']
+	# here there is a json in a particular json and to access that we have created df_inner variable in which a big df will be concated using a for loop 
+	df_inner=pd.json_normalize(edges)
+
+	for i in range(1,len(data['edges'])):
+
+		
+		edges=data['edges'][i]['node']['lineItems']['edges']
+		df_inner1=pd.json_normalize(edges)
+		df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
+
+
+
+	df_list=[df_inner]
+
+	while next_page == "True":
+		graphql_query = """
+		query MyQuery($filter: String, $cursor: String) {
+		orders(first: 76, query: $filter, after: $cursor) {
+		
+			edges {
+			
+			node {
+				createdAt
+				returnStatus
+				name
+				lineItems(first: 10) {
+				edges {
+					
+					node {
+					name
+					currentQuantity
+					quantity
+					}
+				}
+				
+				}
+			}
+			}
+			
+			pageInfo {
+			endCursor
+			hasNextPage
+			}
+		}
+		}
+		"""
+		
+		variables = {"filter": filterq, "cursor": cursor}
+		payload = {"query": graphql_query, "variables": variables}
+  
+		response = requests.post( url, headers=newheaders, json=payload)
+		data=json.loads(response.text)["data"]["orders"]
+		next_page=str(data["pageInfo"]["hasNextPage"])
+		cursor=str(data["pageInfo"]["endCursor"])
+
+		edges=data['edges'][0]['node']['lineItems']['edges']
+		df_inner=pd.json_normalize(edges)
+
+		
+		for i in range(1,len(data['edges'])):
+			edges=data['edges'][i]['node']['lineItems']['edges']	
+			df_inner1=pd.json_normalize(edges)
+			df_inner=pd.concat([df_inner,df_inner1],axis=0,ignore_index=True)
+
+		df_list.append(df_inner)
+		
+	# concat all smalll dfs to get a big one
+	df_final=pd.concat(df_list,axis=0,ignore_index=True)
+
+	# fill null values by 0
+	df_final.fillna({
+		'node.currentQuantity':0,
+		'node.quantity':0
+	},inplace=True)
+
+	# only take the data where the current quantity is less than the original quantity
+	df_final=df_final[   df_final['node.currentQuantity'] < df_final['node.quantity'] ]
+	df_final['diff']=df_final['node.quantity']-df_final['node.currentQuantity']
+
+	# group the df by the product name
+	df=df_final.groupby('node.name').sum()
+
+	print("=========================================")
+	# return the top returned products and to get this we sort the values by the differtence and only return the top 10
+	return_products=list(df.sort_values('diff',ascending=False).index[1:11])
+	
+	return JsonResponse(
+		data={
+			"data":return_products
+		},
+		status=200
+	)
+
+# Dashboard main api for custom,weekly and monthly data
+def give_data_from_sql(shop,startdate,enddate):
+    
+	'''
+	takes the shop name , the start date and the end date 
+	and gives the required data by connecting to sql using the sqlalchemy engine
+	'''
+    
+    # data for insights of a shop
+	df=pd.read_sql_query(
+	f'''
+	select 
+	sum(datacount_for_customers) as a,
+	sum(datacount) as b,
+	sum(total_quantity) as c,
+	sum(total_price) as d,
+	sum(total_order) as e,
+	sum(total_return_quantity) as f,
+	sum(unique_users) as g,
+	sum(returned_users) as h
+	from
+	{shop}insights
+	where date between "{startdate}" and "{enddate}"
+	;
+	''',
+	engine
+	)
+ 
+	insights={
+	'total_quantity':df.loc[0].c,
+	'total_price':df.loc[0].d,
+	'total_order':df.loc[0].e,
+	'total_return_quantity':df.loc[0].f,
+	'return_rate':round((df.loc[0].f/df.loc[0].c)*100,2),
+	'average_order_value':round(df.loc[0].d/df.loc[0].e,2),
+	'average_units_ordered':round(df.loc[0].c/df.loc[0].e,2),
+	'return_customer_rate':round((df.loc[0].h*100)/df.loc[0].g,2),
+	'returned_users':df.loc[0].h,
+	'unique_users':df.loc[0].g
+
+	}
+	
+	# data for top products 
+	df=pd.read_sql_query(
+	f'''
+		select name,sum(quantity) as total_quantity,
+		sum(total_price) as total_price
+		from {shop}top_products where date between "{startdate}" and "{enddate}" and name not like "Free%"
+		group by name
+		;
+		''',
+		engine
+	)
+
+	top_products_by_quantity=list(df.sort_values('total_quantity',ascending=False).name[:10])
+	top_products_by_total_price=list(df.sort_values('total_price',ascending=False).name[:10])
+
+	# data for top return products
+	df=pd.read_sql_query(
+	'''
+	select name ,sum(return_quantity) as total_return_quantity
+	from bombayshavingtop_return_products
+	where date between "2024-01-16" and "2024-01-18" and name not like "%Free%"
+	group by name
+	order by total_return_quantity desc
+	limit 10;
+	''',
+	engine
+			)
+
+	top_return_products=list(df.name)
+
+	# data for top channels
+	df=pd.read_sql_query(
+	f'''
+	select channel_name,sum(sold_quantity) as total_quantity
+	from {shop}top_channels 
+	where date between "{startdate}" and "{enddate}"
+	group by channel_name
+	order by total_quantity ;
+	''',
+	engine
+	)
+	top_channels=list(df.channel_name)
+
+	data={
+		'insights':insights,
+		'top_products_by_quantity':top_products_by_quantity,
+		'top_products_by_total_price':top_products_by_total_price,
+		'top_return_products':top_return_products,
+		'top_channels':top_channels
+	}
+	return data
+       
+    
+@api_view(['POST'])
+@csrf_exempt
+def give_analytics(request):
+	startdate=request.POST.get('startdate')
+	enddate=request.POST.get('enddate')
+	outletapikey=request.headers.get('outletapikey')
+
+	shop,access=give_details(outletapikey)
+	if shop==False:
+		return JsonResponse(
+                data={
+                    'mssg':'XIRCLS server down....'
+                },
+                status=HTTP_400_BAD_REQUEST
+            )
+		
+	shop_name_sql=shop.split(".")[0].replace("-",'')
+	print(shop)
+
+	
+	data=give_data_from_sql(shop_name_sql,startdate,enddate)
+	
+	return JsonResponse(
+		data=data,
+		safe=False,
+		status=200
+	)
+
+
+#################################################################################################
 
 @csrf_exempt
 def give_insights(request):
@@ -559,7 +1199,7 @@ def top_products(request):
 		status=200
 	)
 
-from time import sleep
+
 
 @api_view(['POST'])
 @csrf_exempt
